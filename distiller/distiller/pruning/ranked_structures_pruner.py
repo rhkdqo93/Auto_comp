@@ -64,6 +64,11 @@ class _RankedStructureParameterPruner(_ParameterPruner):
         return param_name in self.params_names
 
     def fraction_to_prune(self, param_name):
+        print("GWANG~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+        print("param_name")
+        print(param_name)
+        print("desired_sparsity")
+        print(self.desired_sparsity)
         return self.desired_sparsity
 
     def set_param_mask(self, param, param_name, zeros_mask_dict, meta):
@@ -152,8 +157,6 @@ class LpRankedStructureParameterPruner(_RankedStructureParameterPruner):
                 return
             threshold = bottomk_channels[-1]
             binary_map = channel_mags.gt(threshold).type(param.data.type())
-
-            print("Gwang")
 
         if zeros_mask_dict is not None:
             mask, _ = distiller.thresholding.expand_binary_map(param, 'Channels', binary_map)
@@ -634,7 +637,6 @@ class FMReconstructionChannelPruner(_RankedStructureParameterPruner):
         if fraction_to_prune == 0:
             return
 
-        print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
         binary_map = self.rank_and_prune_channels(fraction_to_prune, param, param_name,
                                                   zeros_mask_dict, model, binary_map,
                                                   group_size=self.group_size,
@@ -657,8 +659,16 @@ class FMReconstructionChannelPruner(_RankedStructureParameterPruner):
                 # Empty list means that fraction_to_prune is too low to prune anything
                 return
 
+            print(bottomk_channels)
+            print("-----------------------------")
+            print(channel_mags)
+
             threshold = bottomk_channels[-1]
+            print("threshold")
+            print(threshold)
             binary_map = channel_mags.gt(threshold)
+            print("binary_map")
+            print(binary_map)
 
             # These are the indices of channels we want to keep
             indices = binary_map.nonzero().squeeze()
