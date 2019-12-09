@@ -82,6 +82,11 @@ def remove_channels(model, zeros_mask_dict, arch, dataset, optimizer):
     apply_and_save_recipe(model, zeros_mask_dict, thinning_recipe, optimizer)
     return model
 
+def remove_groups(model, zeros_mask_dict, arch, dataset, optimizer):
+    "GWANG Group"
+    sgraph = _create_graph(dataset, model)
+
+
 
 def remove_filters(model, zeros_mask_dict, arch, dataset, optimizer):
     """Contract a model by removing weight filters"""

@@ -646,6 +646,12 @@ class FMReconstructionChannelPruner(_RankedStructureParameterPruner):
                                 noise=0):
         assert binary_map is None
         if binary_map is None:
+
+            #GWANG
+            '''
+            print(param.shape)
+            print("------------")
+            print(fraction_to_prune)
             bottomk_channels, channel_mags = distiller.norms.rank_channels(param, group_size, magnitude_fn,
                                                                            fraction_to_prune, rounding_fn, noise)
 
@@ -661,7 +667,7 @@ class FMReconstructionChannelPruner(_RankedStructureParameterPruner):
             indices = binary_map.nonzero().squeeze()
             if len(indices.shape) == 0:
                 indices = indices.expand(1)
-
+            '''
             # Find the module representing this layer
             distiller.assign_layer_fq_names(model)
             layer_name = _param_name_2_layer_name(param_name)
@@ -673,6 +679,7 @@ class FMReconstructionChannelPruner(_RankedStructureParameterPruner):
                 raise ValueError("To use FMReconstructionChannelPruner you must first collect input statistics")
 
             op_type = 'conv' if param.dim() == 4 else 'fc'
+            '''
             # We need to remove the chosen weights channels.  Because we are using 
             # min(MSE) to compute the weights, we need to start by removing feature-map 
             # channels from the input.  Then we perform the MSE regression to generate
@@ -696,31 +703,67 @@ class FMReconstructionChannelPruner(_RankedStructureParameterPruner):
             new_w = _least_square_sklearn(X, Y)
             new_w = torch.from_numpy(new_w) # shape: (num_filters, num_non_masked_channels * k^2)
             cnt_retained_channels = binary_map.sum()
-
+            '''
             if op_type == 'conv':
+                
+                tmp_pruned = param.clone()
+                #print(tmp_pruned)
+                #print("-----------------")
+                original_size = tmp_pruned.size()
+                tmp_pruned = tmp_pruned.view(original_size[0], -1)
+                append_size = 4 - tmp_pruned.shape[1]%4
+                tmp_pruned = torch.cat((tmp_pruned, tmp_pruned[:, 0:append_size]), 1)
+                tmp_pruned = tmp_pruned.view(tmp_pruned.shape[0], -1, 4)
+                shape = tmp_pruned.shape
+                tmp_pruned = tmp_pruned.pow(2.0).mean(2, keepdim=True).pow(0.5).expand(tmp_pruned.shape).lt(0.15)
+                tmp_pruned = tmp_pruned.view(original_size[0], -1)
+                tmp_pruned = tmp_pruned[:, 0:param[0].nelement()]
+                tmp_pruned = tmp_pruned.view(original_size)
+
+                '''
                 # Expand the weights back to their original size,
                 new_w = new_w.contiguous().view(param.size(0), cnt_retained_channels, param.size(2), param.size(3))
-
                 # Copy the weights that we learned from minimizing the feature-maps least squares error,
                 # to our actual weights tensor.
                 param.detach()[:, indices, :,   :] = new_w.type(param.type())
+                '''
             else:
+                
+                tmp_pruned = param.clone()
+                append_size = 4-tmp_pruned.shape[1]%4
+                tmp_pruned = torch.cat((tmp_pruned, tmp_pruned[:, 0:append_size]), 1)
+                tmp_pruned = tmp_pruned.view(tmp_pruned.shape[0], -1, 4)
+                shape = tmp_pruned.shape
+                tmp_pruned = tmp_pruned.pow(2.0).mean(2, keepdim=True).pow(0.5).expand(tmp_pruned.shape).lt(0.1)
+                tmp_pruned = tmp_pruned.view(tmp_pruned.shape[0], -1)
+                tmp_pruned = tmp_pruned[:, 0:param.shape[1]]
+
+                '''
                 param.detach()[:, indices] = new_w.type(param.type())
+                '''
 
         if zeros_mask_dict is not None:
-            binary_map = binary_map.type(param.type())
+            #binary_map = tmp_pruned.type(param.type())
+            binary_map = tmp_pruned.type(param.type())
+            #print(binary_map)
+            print("GWANG~~~~~~~~~~~~~~~")
             if op_type == 'conv':
+                zeros_mask_dict[param_name].mask = binary_map
+                print(distiller.sparsity_group(zeros_mask_dict[param_name].mask))
+                '''
                 zeros_mask_dict[param_name].mask, _ = distiller.thresholding.expand_binary_map(param,
                                                                                                'Channels', binary_map)
+                '''                                                                                                 
                 msglogger.info("FMReconstructionChannelPruner - param: %s pruned=%.3f goal=%.3f (%d/%d)",
                                param_name,
-                               distiller.sparsity_ch(zeros_mask_dict[param_name].mask),
+                               distiller.sparsity_group(zeros_mask_dict[param_name].mask),
                                fraction_to_prune, binary_map.sum().item(), param.size(1))
             else:
                 msglogger.error("fc sparsity = %.2f" % (1 - binary_map.sum().item() / binary_map.size(0)))
-                zeros_mask_dict[param_name].mask = binary_map.expand(param.size(0), param.size(1))
+                #zeros_mask_dict[param_name].mask = binary_map.expand(param.size(0), param.size(1))
+                zeros_mask_dict[param_name].mask = binary_map
                 msglogger.info("FMReconstructionChannelPruner - param: %s pruned=%.3f goal=%.3f (%d/%d)",
                                param_name,
-                               distiller.sparsity_cols(zeros_mask_dict[param_name].mask),
+                               distiller.sparsity_matrix(zeros_mask_dict[param_name].mask,2),
                                fraction_to_prune, binary_map.sum().item(), param.size(1))
         return binary_map

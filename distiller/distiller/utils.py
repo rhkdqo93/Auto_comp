@@ -269,6 +269,24 @@ def sparsity_ch(tensor):
     n_channels = tensor.size(1)
     return 1 - nonzero_channels/n_channels
 
+def sparsity_group(tensor):
+    "GWANG"
+    if tensor.dim() != 4:
+        return 0
+    count = 0
+
+    for i in range(tensor.shape[0]):
+        for j in range(tensor.shape[1]):
+            for k in range(tensor.shape[2]):
+                for p in range(tensor.shape[3]):
+                    if(tensor[i][j][k][p] == 0):
+                        count += 1
+    
+    nonzero_num = count
+    total_parameter = tensor.shape[0]*tensor.shape[1]*tensor.shape[2]*tensor.shape[3]
+
+    return 1-nonzero_num/total_parameter
+
 
 def density_ch(tensor):
     """Channel-wise density for 4D tensors"""
