@@ -342,7 +342,6 @@ def get_network_details(model, dataset, dependency_type, layers_to_prune=None):
 
             if layers_to_prune is None or name in layers_to_prune:
                 pruned_indices.append(layer_id)
-                print(pruned_indices)
                 # Find the data-dependent layers of this convolution
                 from utils.data_dependencies import find_dependencies
                 new_layer.dependencies = list()

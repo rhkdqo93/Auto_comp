@@ -310,8 +310,6 @@ def k_smallest_elems(mags, k, noise):
 def rank_channels(param, group_len, magnitude_fn, fraction_to_partition, rounding_fn, noise):
     assert param.dim() in (2, 4), "This ranking is only supported for 2D and 4D tensors"
     n_channels = param.size(1)
-    print("fraction_to_partition")
-    print(fraction_to_partition)
     n_ch_to_prune = num_structs_to_prune(n_channels, group_len, fraction_to_partition, rounding_fn)
     if n_ch_to_prune == 0:
         return None, None
