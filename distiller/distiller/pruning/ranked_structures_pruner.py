@@ -715,7 +715,37 @@ class FMReconstructionChannelPruner(_RankedStructureParameterPruner):
                 tmp_pruned = torch.cat((tmp_pruned, tmp_pruned[:, 0:append_size]), 1)
                 tmp_pruned = tmp_pruned.view(tmp_pruned.shape[0], -1, 4)
                 shape = tmp_pruned.shape
-                tmp_pruned = tmp_pruned.pow(2.0).mean(2, keepdim=True).pow(0.5).expand(tmp_pruned.shape).lt(0.15)
+                #sparsity
+                simd_tmp = tmp_pruned.clone()
+                tmp_pruned1 = tmp_pruned.clone()
+                tmp_pruned1 = tmp_pruned1.pow(2.0)
+                simd_tmp = simd_tmp.resize_(tmp_pruned.shape[0], math.floor(tmp_pruned.shape[1]/4))
+
+                for i in range(tmp_pruned.shape[0]):
+                    for j in range(math.floor(tmp_pruned.shape[1]/4)):
+                        simd_tmp[i][j] = 0
+
+                for i in range(tmp_pruned.shape[0]):
+                    for j in range(math.floor(tmp_pruned.shape[1]/4)):
+                        simd_tmp[i][j] = tmp_pruned1[i][j*4] + tmp_pruned1[i][j*4+1] + tmp_pruned1[i][j*4+2] + tmp_pruned1[i][j*4+3]
+
+                sort_tmp = []
+
+                for i in range(tmp_pruned.shape[0]):
+                    for j in ramge(math.floor(tmp_pruned.shape[1]/4)):
+                        sort_tmp.append(simd_tmp[i][j])
+
+                sorted_tmp = sorted(sort_tmp)
+
+                index_v = 0
+
+                for i in range(len(sorted_tmp)):
+                    a = i/len(sorted_tmp)
+                    if(a > fraction_to_prune):
+                        index_v = sorted_tmp[i-1]
+                        break
+
+                tmp_pruned = tmp_pruned.pow(2.0).mean(2, keepdim=True).pow(0.5).expand(tmp_pruned.shape).lt(index_v)
                 tmp_pruned = tmp_pruned.view(original_size[0], -1)
                 tmp_pruned = tmp_pruned[:, 0:param[0].nelement()]
                 tmp_pruned = tmp_pruned.view(original_size)

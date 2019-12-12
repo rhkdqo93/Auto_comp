@@ -122,7 +122,7 @@ class NetworkWrapper(object):
             #GWANG calculate_sparsity
             if layer.type == "Linear":
                 calculate_sparsity = distiller.sparsity_rows
-            remove_structures_fn = distiller.remove_channels
+            remove_structures_fn = distiller.remove_groups
             #GWANG remove_structures_fn
             group_type = "Channels"
         elif prune_what == "filters":

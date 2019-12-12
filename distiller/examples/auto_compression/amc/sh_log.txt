@@ -1,0 +1,10 @@
+#0: episode_reward:0.1304 acc: 13.0400, ratio: 14.5478
+best reward: 0.13039999999999996
+#1: episode_reward:0.1346 acc: 13.4600, ratio: 14.5478
+best reward: 0.13460000000000005
+#2: episode_reward:0.1314 acc: 13.1400, ratio: 14.5478
+best reward: 0.13460000000000005
+#3: episode_reward:0.1334 acc: 13.3400, ratio: 14.5478
+best reward: 0.13460000000000005
+#4: episode_reward:0.1344 acc: 13.4400, ratio: 14.5478
+best reward: 0.13460000000000005

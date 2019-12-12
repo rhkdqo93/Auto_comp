@@ -58,7 +58,7 @@ These tuples can have 2 values, or 4 values.
 
 __all__ = ['ThinningRecipe', 'resnet_cifar_remove_layers',
            'StructureRemover',
-           'ChannelRemover', 'remove_channels',
+           'ChannelRemover', 'remove_channels', 'remove_groups',
            'FilterRemover',  'remove_filters',
            'contract_model',
            'execute_thinning_recipes_list', 'get_normalized_recipe']
@@ -85,8 +85,9 @@ def remove_channels(model, zeros_mask_dict, arch, dataset, optimizer):
 def remove_groups(model, zeros_mask_dict, arch, dataset, optimizer):
     "GWANG Group"
     sgraph = _create_graph(dataset, model)
-
-
+    thinning_recipe = create_thinning_recipe_channels(sgraph, model, zeros_mask_dict)
+    apply_and_save_recipe(model, zeros_mask_dict, thinning_recipe, optimizer)
+    return model
 
 def remove_filters(model, zeros_mask_dict, arch, dataset, optimizer):
     """Contract a model by removing weight filters"""
@@ -189,6 +190,94 @@ def apply_and_save_recipe(model, zeros_mask_dict, thinning_recipe, optimizer):
         msglogger.info("Created, applied and saved a thinning recipe")
     else:
         msglogger.error("Failed to create a thinning recipe")
+
+def create_thinning_recipe_groups(sgraph, model, zeros_mask_dict):
+    
+    def handle_layer(layer_name, param_name, nnz_params):
+
+        # We are removing channels, so update the number of incoming channels (IFMs)
+        # in the convolutional layer
+        assert isinstance(layers[layer_name], (torch.nn.modules.Conv2d, torch.nn.modules.Linear))
+
+        _append_module_directive(thinning_recipe, layer_name, key='in_channels', val=nnz_channels)
+
+        # Select only the non-zero channels
+        indices = nonzero_channels.data.squeeze()
+        dim = 1 if isinstance(layers[layer_name], torch.nn.modules.Conv2d) and layers[layer_name].groups == 1 else 0
+        if isinstance(layers[layer_name], torch.nn.modules.Linear):
+            dim = 1
+        _append_param_directive(thinning_recipe, param_name, (dim, indices))
+
+        # Find all instances of Convolution layers that immediately precede this layer
+        predecessors = sgraph.predecessors_f(layer_name, ['Conv'])
+        if not predecessors:
+            msglogger.info("Could not find predecessors for name=%s" % layer_name)
+        for predecessor in predecessors:
+            # For each of the convolution layers that precede, we have to reduce the number of output channels.
+            _append_module_directive(thinning_recipe, predecessor, key='out_channels', val=nnz_channels)
+
+            if layers[predecessor].groups == 1:
+                # Now remove filters from the weights tensor of the predecessor conv
+                _append_param_directive(thinning_recipe, predecessor + '.weight', (0, indices))
+                if layers[predecessor].bias is not None:
+                    # This convolution has bias coefficients
+                    _append_param_directive(thinning_recipe, predecessor + '.bias', (0, indices))
+
+            elif layers[predecessor].groups == layers[predecessor].in_channels:
+                # This is a group-wise convolution, and a special one at that (groups == in_channels).
+                # Now remove filters from the weights tensor of the predecessor conv
+                _append_param_directive(thinning_recipe, predecessor + '.weight', (0, indices))
+
+                if layers[predecessor].bias is not None:
+                    # This convolution has bias coefficients
+                    _append_param_directive(thinning_recipe, predecessor + '.bias', (0, indices))
+                _append_module_directive(thinning_recipe, predecessor, key='groups', val=nnz_channels)
+
+                # In the special case of a Convolutional layer with (groups == in_channels), if we
+                # change in_channels, we also need to change out_channels, which means that we
+                # have to perform filter removal for this layer as well
+                param_name = predecessor+'.weight'
+                handle_layer(predecessor, param_name, nnz_channels)
+            else:
+                raise ValueError("Distiller thinning code currently does not handle this conv.groups configuration")
+
+        # Now handle the BatchNormalization layer that follows the convolution
+        bn_layers = sgraph.predecessors_f(layer_name, ['BatchNormalization'])
+        for bn_layer in bn_layers:
+            # Thinning of the BN layer that follows the convolution
+            msglogger.debug("[recipe] {}: predecessor BN module = {}".format(layer_name, bn_layer))
+            _append_bn_thinning_directive(thinning_recipe, layers, bn_layer,
+                                          len_thin_features=nnz_channels, thin_features=indices)
+
+    msglogger.debug("Invoking create_thinning_recipe_channels")
+    thinning_recipe = ThinningRecipe(modules={}, parameters={})
+    layers = {mod_name: m for mod_name, m in model.named_modules()}
+
+    # Traverse all of the model's parameters, search for zero-channels, and
+    # create a thinning recipe that descibes the required changes to the model.
+    for layer_name, param_name, param in sgraph.named_params_layers():
+        if param.dim() in (2, 4):
+            num_channels = param.size(1)
+            # Find nonzero input channels
+            if param.dim() == 2:
+                # 2D weights (of Linear layers)
+                col_sums = param.abs().sum(dim=0)
+                nonzero_channels = torch.nonzero(col_sums)
+                num_nnz_channels = nonzero_channels.nelement()
+            elif param.dim() == 4:
+                # 4D weights (of Convolution layers)
+                nonzero_channels = distiller.non_zero_channels(param)
+                print("GWANG NNZ_CHANNELS")
+                print(nonzero_channels)
+                num_nnz_channels = nonzero_channels.nelement()
+            if num_nnz_channels == 0:
+                raise ValueError("Trying to zero all channels for parameter %s is not allowed" % param_name)
+            # If there are no non-zero channels in this tensor then continue to next tensor
+            if num_channels <= num_nnz_channels:
+                 print("PASS HERE")
+                 continue
+            handle_layer(layer_name, param_name, num_nnz_channels)
+    return thinning_recipe
 
 
 def create_thinning_recipe_channels(sgraph, model, zeros_mask_dict):
