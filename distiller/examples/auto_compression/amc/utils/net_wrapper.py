@@ -112,6 +112,7 @@ class NetworkWrapper(object):
 
         layer = self.model_metadata.get_pruned_layer(layer_id)
         macs_before = self.layer_net_macs(layer)
+        print("macs_before is {}".format(macs_before))
         conv_pname = layer.name + ".weight"
         conv_p = distiller.model_find_param(self.model, conv_pname)
 
@@ -215,6 +216,7 @@ class NetworkMetadata(object):
 
     def reduce_layer_macs(self, layer, reduction):
         total_macs_reduced = layer.macs * reduction
+        print("total_macs_reduced is {}".format(total_macs_reduced))
         total_nnz_reduced = layer.weights_vol * reduction
         layer.macs -= total_macs_reduced
         layer.weights_vol -= total_nnz_reduced

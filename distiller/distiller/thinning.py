@@ -85,7 +85,7 @@ def remove_channels(model, zeros_mask_dict, arch, dataset, optimizer):
 def remove_groups(model, zeros_mask_dict, arch, dataset, optimizer):
     "GWANG Group"
     sgraph = _create_graph(dataset, model)
-    thinning_recipe = create_thinning_recipe_channels(sgraph, model, zeros_mask_dict)
+    thinning_recipe = create_thinning_recipe_groups(sgraph, model, zeros_mask_dict)
     apply_and_save_recipe(model, zeros_mask_dict, thinning_recipe, optimizer)
     return model
 
@@ -193,7 +193,7 @@ def apply_and_save_recipe(model, zeros_mask_dict, thinning_recipe, optimizer):
 
 def create_thinning_recipe_groups(sgraph, model, zeros_mask_dict):
     
-    def handle_layer(layer_name, param_name, nnz_params):
+    def handle_layer(layer_name, param_name, nnz_channels):
 
         # We are removing channels, so update the number of incoming channels (IFMs)
         # in the convolutional layer
@@ -260,22 +260,26 @@ def create_thinning_recipe_groups(sgraph, model, zeros_mask_dict):
             num_channels = param.size(1)
             # Find nonzero input channels
             if param.dim() == 2:
+                print("FC is here")
                 # 2D weights (of Linear layers)
                 col_sums = param.abs().sum(dim=0)
                 nonzero_channels = torch.nonzero(col_sums)
                 num_nnz_channels = nonzero_channels.nelement()
             elif param.dim() == 4:
                 # 4D weights (of Convolution layers)
-                nonzero_channels = distiller.non_zero_channels(param)
-                print("GWANG NNZ_CHANNELS")
-                print(nonzero_channels)
+                nonzero_channel = []
+                for i in range(num_channels):
+                    nonzero_channel.append([])
+                for i in range(num_channels):
+                    nonzero_channel[i].append(i)
+                nonzero_channels = torch.Tensor(nonzero_channel)
+                #nonzero_channels = distiller.non_zero_channels(param)
                 num_nnz_channels = nonzero_channels.nelement()
             if num_nnz_channels == 0:
                 raise ValueError("Trying to zero all channels for parameter %s is not allowed" % param_name)
             # If there are no non-zero channels in this tensor then continue to next tensor
             if num_channels <= num_nnz_channels:
-                 print("PASS HERE")
-                 continue
+                continue
             handle_layer(layer_name, param_name, num_nnz_channels)
     return thinning_recipe
 

@@ -232,7 +232,10 @@ class DistillerWrapperEnvironment(gym.Env):
 
         # Calculate the final compression rate
         total_macs_before, _ = self.net_wrapper.get_resources_requirements()
+        print("total_macs_before is {}".format(total_macs_before))
+        print(self.current_layer())
         layer_macs = self.net_wrapper.layer_macs(self.current_layer())
+        print("layer_macs is {}".format(layer_macs))
         msglogger.debug("\tlayer_macs={:.2f}".format(layer_macs / self.original_model_macs))
         msglogger.debug("\tremoved_macs={:.2f}".format(self.removed_macs_pct))
         msglogger.debug("\trest_macs={:.2f}".format(self.rest_macs()))
@@ -413,7 +416,6 @@ class DistillerWrapperEnvironment(gym.Env):
         We use the validation dataset (the size of the validation dataset is
         configured when the data-loader is instantiated)"""
         num_elements = distiller.model_params_size(self.model, param_dims=[2, 4], param_types=['weight'])
-
         # Fine-tune (this is a nop if self.amc_cfg.num_ft_epochs==0)
         accuracies = self.net_wrapper.train(self.amc_cfg.num_ft_epochs, self.episode)
         self.ft_stats_logger.add_record([self.episode, accuracies])

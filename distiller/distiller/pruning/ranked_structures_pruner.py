@@ -706,35 +706,35 @@ class FMReconstructionChannelPruner(_RankedStructureParameterPruner):
             '''
             if op_type == 'conv':
                 
-                tmp_pruned = param.clone()
-                #print(tmp_pruned)
-                #print("-----------------")
+                tmp_pruned = param.data.clone()
                 original_size = tmp_pruned.size()
                 tmp_pruned = tmp_pruned.view(original_size[0], -1)
                 append_size = 4 - tmp_pruned.shape[1]%4
                 tmp_pruned = torch.cat((tmp_pruned, tmp_pruned[:, 0:append_size]), 1)
+                tmp_pruned1 = tmp_pruned.data.clone()
                 tmp_pruned = tmp_pruned.view(tmp_pruned.shape[0], -1, 4)
                 shape = tmp_pruned.shape
-                #sparsity
-                simd_tmp = tmp_pruned.clone()
-                tmp_pruned1 = tmp_pruned.clone()
+                
+                simd_tmp = []
                 tmp_pruned1 = tmp_pruned1.pow(2.0)
-                simd_tmp = simd_tmp.resize_(tmp_pruned.shape[0], math.floor(tmp_pruned.shape[1]/4))
+                
+                for i in range(tmp_pruned.shape[0]):
+                    simd_tmp.append([])
 
                 for i in range(tmp_pruned.shape[0]):
                     for j in range(math.floor(tmp_pruned.shape[1]/4)):
-                        simd_tmp[i][j] = 0
-
+                        simd_tmp[i].append(0)
+                
                 for i in range(tmp_pruned.shape[0]):
                     for j in range(math.floor(tmp_pruned.shape[1]/4)):
                         simd_tmp[i][j] = tmp_pruned1[i][j*4] + tmp_pruned1[i][j*4+1] + tmp_pruned1[i][j*4+2] + tmp_pruned1[i][j*4+3]
-
+                
                 sort_tmp = []
 
                 for i in range(tmp_pruned.shape[0]):
-                    for j in ramge(math.floor(tmp_pruned.shape[1]/4)):
+                    for j in range(math.floor(tmp_pruned.shape[1]/4)):
                         sort_tmp.append(simd_tmp[i][j])
-
+                
                 sorted_tmp = sorted(sort_tmp)
 
                 index_v = 0
@@ -742,13 +742,23 @@ class FMReconstructionChannelPruner(_RankedStructureParameterPruner):
                 for i in range(len(sorted_tmp)):
                     a = i/len(sorted_tmp)
                     if(a > fraction_to_prune):
-                        index_v = sorted_tmp[i-1]
+                        index_v = sorted_tmp[i-1].item()
+                        #print("i is {}".format(i))
                         break
 
                 tmp_pruned = tmp_pruned.pow(2.0).mean(2, keepdim=True).pow(0.5).expand(tmp_pruned.shape).lt(index_v)
                 tmp_pruned = tmp_pruned.view(original_size[0], -1)
-                tmp_pruned = tmp_pruned[:, 0:param[0].nelement()]
+                tmp_pruned = tmp_pruned[:, 0:param.data[0].nelement()]
                 tmp_pruned = tmp_pruned.view(original_size)
+                
+                for i in range (original_size[0]):
+                    for j in range (original_size[1]):
+                        for k in range (original_size[2]):
+                            for p in range (original_size[3]):
+                                if(tmp_pruned[i][j][k][p] == 0):
+                                    tmp_pruned[i][j][k][p] = 1
+                                else:
+                                    tmp_pruned[i][j][k][p] = 0
 
                 '''
                 # Expand the weights back to their original size,
@@ -759,14 +769,53 @@ class FMReconstructionChannelPruner(_RankedStructureParameterPruner):
                 '''
             else:
                 
-                tmp_pruned = param.clone()
+                tmp_pruned = param.data.clone()
                 append_size = 4-tmp_pruned.shape[1]%4
                 tmp_pruned = torch.cat((tmp_pruned, tmp_pruned[:, 0:append_size]), 1)
+                tmp_pruned1 = tmp_pruned.data.clone()
                 tmp_pruned = tmp_pruned.view(tmp_pruned.shape[0], -1, 4)
                 shape = tmp_pruned.shape
-                tmp_pruned = tmp_pruned.pow(2.0).mean(2, keepdim=True).pow(0.5).expand(tmp_pruned.shape).lt(0.1)
+
+                simd_tmp = []
+                tmp_pruned1 = tmp_pruned1.pow(2.0)
+                
+                for i in range(tmp_pruned.shape[0]):
+                    simd_tmp.append([])
+
+                for i in range(tmp_pruned.shape[0]):
+                    for j in range(math.floor(tmp_pruned.shape[1]/4)):
+                        simd_tmp[i].append(0)
+                
+                for i in range(tmp_pruned.shape[0]):
+                    for j in range(math.floor(tmp_pruned.shape[1]/4)):
+                        simd_tmp[i][j] = tmp_pruned1[i][j*4] + tmp_pruned1[i][j*4+1] + tmp_pruned1[i][j*4+2] + tmp_pruned1[i][j*4+3]
+
+                sort_tmp = []
+
+                for i in range(tmp_pruned.shape[0]):
+                    for j in range(math.floor(tmp_pruned.shape[1]/4)):
+                        sort_tmp.append(simd_tmp[i][j])
+
+                sorted_tmp = sorted(sort_tmp)
+
+                index_v = 0
+
+                for i in range(len(sorted_tmp)):
+                    a = i/len(sorted_tmp)
+                    if(a > fraction_to_prune):
+                        index_v = sorted_tmp[i-1].item()
+                        break
+
+                tmp_pruned = tmp_pruned.pow(2.0).mean(2, keepdim=True).pow(0.5).expand(tmp_pruned.shape).lt(index_v)
                 tmp_pruned = tmp_pruned.view(tmp_pruned.shape[0], -1)
-                tmp_pruned = tmp_pruned[:, 0:param.shape[1]]
+                tmp_pruned = tmp_pruned[:, 0:param.data.shape[1]]
+
+                for i in range(tmp_pruned.shape[0]):
+                    for j in range(tmp_pruned.shape[1]):
+                        if(tmp_pruned[i][j] == 0):
+                            tmp_pruned[i][j] = 1
+                        else:
+                            tmp_pruned[i][j] = 0
 
                 '''
                 param.detach()[:, indices] = new_w.type(param.type())
@@ -775,11 +824,8 @@ class FMReconstructionChannelPruner(_RankedStructureParameterPruner):
         if zeros_mask_dict is not None:
             #binary_map = tmp_pruned.type(param.type())
             binary_map = tmp_pruned.type(param.type())
-            #print(binary_map)
-            print("GWANG~~~~~~~~~~~~~~~")
             if op_type == 'conv':
                 zeros_mask_dict[param_name].mask = binary_map
-                print(distiller.sparsity_group(zeros_mask_dict[param_name].mask))
                 '''
                 zeros_mask_dict[param_name].mask, _ = distiller.thresholding.expand_binary_map(param,
                                                                                                'Channels', binary_map)
@@ -794,6 +840,6 @@ class FMReconstructionChannelPruner(_RankedStructureParameterPruner):
                 zeros_mask_dict[param_name].mask = binary_map
                 msglogger.info("FMReconstructionChannelPruner - param: %s pruned=%.3f goal=%.3f (%d/%d)",
                                param_name,
-                               distiller.sparsity_matrix(zeros_mask_dict[param_name].mask,2),
+                               distiller.sparsity_group(zeros_mask_dict[param_name].mask),
                                fraction_to_prune, binary_map.sum().item(), param.size(1))
         return binary_map

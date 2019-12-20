@@ -1,4 +1,4 @@
-#
+
 # Copyright (c) 2018 Intel Corporation
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -59,11 +59,15 @@ def mac_constrained_experimental_reward_fn(env, top1, top5, vloss, total_macs):
 def mac_constrained_clamp_action(env, pruning_action):
     """Compute a resource-constrained action"""
     layer_macs = env.net_wrapper.layer_macs(env.current_layer())
-    assert layer_macs > 0
+    assert layer_macs > 0 
     reduced = env.removed_macs
+    print("reduced is {}".format(reduced))
     prunable_rest, non_prunable_rest = env.rest_macs_raw()
     rest = prunable_rest * min(0.9, env.action_high)
     target_reduction = (1. - env.amc_cfg.target_density) * env.original_model_macs
+    print("original_model_macs is {}".format(env.original_model_macs))
+    print("Difference is {}".format(env.original_model_macs - env.net_wrapper.total_macs))
+    print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
     assert reduced == env.original_model_macs - env.net_wrapper.total_macs
     duty = target_reduction - (reduced + rest)
     pruning_action_final = min(1., max(pruning_action, duty/layer_macs))
